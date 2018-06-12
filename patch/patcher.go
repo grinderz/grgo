@@ -39,6 +39,11 @@ var (
 	}
 )
 
+type RP struct {
+	Search  []byte
+	Replace []byte
+}
+
 type Result struct {
 	Path  string
 	Count int
@@ -249,7 +254,7 @@ func (p *Patcher) packGZ(dst io.Writer, r io.Reader) error {
 	return nil
 }
 
-func (p *Patcher) Patch(find, replace []byte, backup bool) {
+func (p *Patcher) Patch(fr []RP, backup bool) {
 	r, err := os.OpenFile(p.path, os.O_RDWR, 0644)
 	if err != nil {
 		p.result <- newError(p, err)
@@ -319,29 +324,36 @@ func (p *Patcher) Patch(find, replace []byte, backup bool) {
 		}
 	}
 
-	log.Printf("%s: search", p.path)
+	replaced := 0
+	for i, b := range fr {
+		log.Printf("%s: search %d", p.path, i)
 
-	if _, err = rawFile.Seek(0, 0); err != nil {
-		p.result <- newError(p, err)
-		return
+		if _, err = rawFile.Seek(0, 0); err != nil {
+			p.result <- newError(p, err)
+			return
+		}
+
+		offsets, err := p.searchBytes(rawFile, b.Search)
+		if err != nil {
+			p.result <- newError(p, err)
+			return
+		}
+		if len(offsets) == 0 {
+			continue
+		}
+
+		log.Printf("%s: patch %d", p.path, i)
+
+		r, err := p.replaceBytes(rawFile, offsets, b.Replace)
+		if err != nil {
+			p.result <- newError(p, err)
+			return
+		}
+		replaced += r
 	}
 
-	offsets, err := p.searchBytes(rawFile, find)
-	if err != nil {
-		p.result <- newError(p, err)
-		return
-	}
-
-	if len(offsets) == 0 {
+	if replaced == 0 {
 		p.result <- newResult(p, 0)
-		return
-	}
-
-	log.Printf("%s: patch", p.path)
-
-	replaced, err := p.replaceBytes(rawFile, offsets, replace)
-	if err != nil {
-		p.result <- newError(p, err)
 		return
 	}
 
