@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"github.com/grinderz/gocpio"
 	"github.com/xi2/xz"
@@ -14,7 +15,6 @@ import (
 )
 
 const kMaxMagicSize = 6
-const kCpioZeroFooterLen = 108
 
 type headerType int
 
@@ -62,6 +62,7 @@ type Patcher struct {
 	temp   string
 	path   string
 	name   string
+	cpioZeroFooterLen int64
 	result chan<- Result
 }
 
@@ -72,6 +73,35 @@ func NewPathcer(temp, path string, result chan<- Result) *Patcher {
 		path:   path,
 		name:   name,
 		result: result,
+	}
+}
+
+func (p *Patcher) findCpioZeroFooterLen(f *os.File) (int64, error) {
+	buff := make([]byte, 8192)
+	totalRead := int64(0)
+
+	var index int64
+	var n int
+
+	var err error
+	for {
+		if n, err = f.Read(buff); err != nil && err != io.EOF {
+			return 0, err
+		}
+		totalRead += int64(n)
+
+		for _, b := range buff {
+			if b != 0x00 {
+				f.Seek(-totalRead+index, 1)
+				return index, nil
+			}
+			index++
+		}
+
+
+		if err == io.EOF {
+			return 0, errors.New("EOF detected")
+		}
 	}
 }
 
@@ -91,26 +121,21 @@ func (p *Patcher) seekCpio(f *os.File) (int64, error) {
 		}
 	}
 	f.Seek(0, 0)
-	return rdr.Pos(), nil
 
+	return rdr.Pos(), nil
 }
 
-func (p *Patcher) cutCpio(dst io.Writer, r *os.File) error {
-	sizeBuff := make([]byte, 8)
-	if _, err := r.ReadAt(sizeBuff, 54); err != nil {
+func (p *Patcher) cutCpio(dst io.Writer, src *os.File) error {
+	if _, err := src.Seek(0, 0); err != nil {
 		return err
 	}
 
-	if _, err := r.Seek(0, 0); err != nil {
-		return err
-	}
-
-	i, err := p.seekCpio(r)
+	i, err := p.seekCpio(src)
 	if err != nil {
 		return err
 	}
 
-	if _, err = io.CopyN(dst, r, i); err != nil {
+	if _, err = io.CopyN(dst, src, i); err != nil {
 		return err
 	}
 
@@ -237,7 +262,7 @@ func (p *Patcher) writeCpio(dst io.Writer, r io.Reader) error {
 	if _, err := io.Copy(dst, r); err != nil {
 		return err
 	}
-	if _, err := dst.Write(make([]byte, kCpioZeroFooterLen)); err != nil {
+	if _, err := dst.Write(make([]byte, p.cpioZeroFooterLen)); err != nil {
 		return err
 	}
 	return nil
@@ -285,10 +310,13 @@ func (p *Patcher) Patch(fr []RP, backup bool) {
 			return
 		}
 
-		if _, err = r.Seek(kCpioZeroFooterLen, 1); err != nil {
+		p.cpioZeroFooterLen, err = p.findCpioZeroFooterLen(r)
+		if err != nil {
 			p.result <- newError(p, err)
 			return
 		}
+
+		log.Println(p.cpioZeroFooterLen)
 
 		t, err = p.getType(r)
 		if err != nil {
