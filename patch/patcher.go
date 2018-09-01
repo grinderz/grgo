@@ -316,8 +316,6 @@ func (p *Patcher) Patch(fr []RP, backup bool) {
 			return
 		}
 
-		log.Println(p.cpioZeroFooterLen)
-
 		t, err = p.getType(r)
 		if err != nil {
 			p.result <- newError(p, err)
