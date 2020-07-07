@@ -1,0 +1,4 @@
+github.com/grinderz/gocpio v1.0.2-0.20200707140622-b5c6fe3526ec h1:5YVte+VcNIq/8yHvObZsjqHTrmpotk7waoof50HNQhY=
+github.com/grinderz/gocpio v1.0.2-0.20200707140622-b5c6fe3526ec/go.mod h1:FkcM7Hs8UsyQw75pgQEZkfkmETETPoCbH605eoqV5Oc=
+github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 h1:nIPpBwaJSVYIxUFsDv3M8ofmx9yWTog9BfvIu0q41lo=
+github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8/go.mod h1:HUYIGzjTL3rfEspMxjDjgmT5uz5wzYJKVo23qUhYTos=

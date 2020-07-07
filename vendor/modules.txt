@@ -1,0 +1,6 @@
+# github.com/grinderz/gocpio v1.0.2-0.20200707140622-b5c6fe3526ec
+## explicit
+github.com/grinderz/gocpio
+# github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8
+## explicit
+github.com/xi2/xz
