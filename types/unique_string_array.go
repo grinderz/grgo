@@ -1,8 +1,6 @@
 package types
 
-import (
-	"strings"
-)
+import "strings"
 
 type UniqueStringArray map[string]interface{}
 
@@ -12,9 +10,11 @@ func (a *UniqueStringArray) Set(s string) error {
 }
 
 func (a *UniqueStringArray) String() string {
-	keys := make([]string, 0, len(*a))
+	keys := make([]string, len(*a))
+	var i uint
 	for k := range *a {
-		keys = append(keys, k)
+		keys[i] = k
+		i++
 	}
 	return strings.Join(keys, "|")
 }

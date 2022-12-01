@@ -10,8 +10,11 @@ func TestUniqueStringArray(t *testing.T) {
 
 	arr := make(UniqueStringArray)
 	for _, k := range keys {
-		arr.Set(k)
-		arr.Set(k)
+		for i := 0; i <= 1; i++ {
+			if err := arr.Set(k); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	if len(arr) != len(keys) {

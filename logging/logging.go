@@ -20,3 +20,7 @@ func Configure(logLevel string, logCaller bool) {
 	Log.SetLevel(lvl)
 	Log.SetReportCaller(logCaller)
 }
+
+func AddHook(hook logrus.Hook) {
+	Log.AddHook(hook)
+}

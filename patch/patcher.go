@@ -6,12 +6,13 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
-	"github.com/grinderz/gocpio"
-	"github.com/xi2/xz"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/grinderz/gocpio"
+	"github.com/grinderz/grgo/logging"
+	"github.com/xi2/xz"
 )
 
 const kMaxMagicSize = 6
@@ -39,19 +40,21 @@ var (
 	}
 )
 
-type RP struct {
-	Search  []byte
-	Replace []byte
+type Pattern struct {
+	Description string
+	Count       int
+	Search      []byte
+	Replace     []byte
 }
 
 type Result struct {
-	Path  string
-	Count int
-	Err   error
+	Path         string
+	BytesPatched int
+	Err          error
 }
 
-func newResult(p *Patcher, count int) Result {
-	return Result{p.path, count, nil}
+func newResult(p *Patcher, bytesPatched int) Result {
+	return Result{p.path, bytesPatched, nil}
 }
 
 func newError(p *Patcher, err error) Result {
@@ -59,11 +62,11 @@ func newError(p *Patcher, err error) Result {
 }
 
 type Patcher struct {
-	temp   string
-	path   string
-	name   string
+	temp              string
+	path              string
+	name              string
 	cpioZeroFooterLen int64
-	result chan<- Result
+	result            chan<- Result
 }
 
 func NewPathcer(temp, path string, result chan<- Result) *Patcher {
@@ -92,12 +95,13 @@ func (p *Patcher) findCpioZeroFooterLen(f *os.File) (int64, error) {
 
 		for _, b := range buff {
 			if b != 0x00 {
-				f.Seek(-totalRead+index, 1)
+				if _, err := f.Seek(-totalRead+index, 1); err != nil {
+					return 0, err
+				}
 				return index, nil
 			}
 			index++
 		}
-
 
 		if err == io.EOF {
 			return 0, errors.New("EOF detected")
@@ -120,8 +124,10 @@ func (p *Patcher) seekCpio(f *os.File) (int64, error) {
 			break
 		}
 	}
-	f.Seek(0, 0)
 
+	if _, err := f.Seek(0, 0); err != nil {
+		return 0, err
+	}
 	return rdr.Pos(), nil
 }
 
@@ -129,23 +135,20 @@ func (p *Patcher) cutCpio(dst io.Writer, src *os.File) error {
 	if _, err := src.Seek(0, 0); err != nil {
 		return err
 	}
-
 	i, err := p.seekCpio(src)
 	if err != nil {
 		return err
 	}
-
 	if _, err = io.CopyN(dst, src, i); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func (p *Patcher) replaceBytes(f *os.File, offsets []int64, replace []byte) (int, error) {
 	totalReplaced := 0
-	for _, o := range offsets {
-		replaced, err := f.WriteAt(replace, o)
+	for _, offset := range offsets {
+		replaced, err := f.WriteAt(replace, offset)
 		if err != nil {
 			return 0, err
 		}
@@ -163,16 +166,16 @@ func (p *Patcher) searchBytes(f io.Reader, find []byte) ([]int64, error) {
 	result := make([]int64, 0, 2)
 
 	buff := make([]byte, 8192)
-	r := bufio.NewReader(f)
+	reader := bufio.NewReader(f)
 	findLen := len(find)
 	totalRead := int64(0)
 
 	var index int
-	var n int
+	var readCounter int
 
 	var err error
 	for {
-		if n, err = r.Read(buff); err != nil && err != io.EOF {
+		if readCounter, err = reader.Read(buff); err != nil && err != io.EOF {
 			return nil, err
 		}
 
@@ -189,7 +192,7 @@ func (p *Patcher) searchBytes(f io.Reader, find []byte) ([]int64, error) {
 			}
 		}
 
-		totalRead += int64(n)
+		totalRead += int64(readCounter)
 		if err == io.EOF {
 			break
 		}
@@ -215,51 +218,56 @@ func (p *Patcher) getType(r io.Reader) (headerType, error) {
 	return kUnknown, fmt.Errorf("unsupported format %x", buff)
 }
 
-func (p *Patcher) unpackXZ(dst io.Writer, r io.Reader) error {
-	xzr, err := xz.NewReader(r, 0)
+func (p *Patcher) unpackXZ(dst io.Writer, reader io.Reader) error {
+	xzReader, err := xz.NewReader(reader, 0)
 	if err != nil {
 		return err
 	}
-
-	if _, err = io.Copy(dst, xzr); err != nil {
+	if _, err = io.Copy(dst, xzReader); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *Patcher) unpackGZ(dst io.Writer, r io.Reader) error {
-	gz, err := gzip.NewReader(r)
+func (p *Patcher) unpackGZ(dst io.Writer, reader io.Reader) error {
+	gzReader, err := gzip.NewReader(reader)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func(gzReader *gzip.Reader) {
+		if err := gzReader.Close(); err != nil {
+			logging.Log.Errorln(err)
+		}
+	}(gzReader)
 
-	if _, err = io.Copy(dst, gz); err != nil {
+	if _, err = io.Copy(dst, gzReader); err != nil {
 		return err
 	}
-
 	return nil
 }
 
-func (p *Patcher) backup(r io.Reader) error {
+func (p *Patcher) backup(reader io.Reader) error {
 	backupFile, err := os.Create(fmt.Sprintf("%s.bak", p.path))
 	if err != nil {
 		return err
 	}
-	defer backupFile.Close()
+	defer func(backupFile *os.File) {
+		if err := backupFile.Close(); err != nil {
+			logging.Log.Errorln(err)
+		}
+	}(backupFile)
 
-	if _, err := io.Copy(backupFile, r); err != nil {
+	if _, err := io.Copy(backupFile, reader); err != nil {
 		return err
 	}
-
 	if err = backupFile.Sync(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *Patcher) writeCpio(dst io.Writer, r io.Reader) error {
-	if _, err := io.Copy(dst, r); err != nil {
+func (p *Patcher) writeCpio(dst io.Writer, reader io.Reader) error {
+	if _, err := io.Copy(dst, reader); err != nil {
 		return err
 	}
 	if _, err := dst.Write(make([]byte, p.cpioZeroFooterLen)); err != nil {
@@ -268,62 +276,72 @@ func (p *Patcher) writeCpio(dst io.Writer, r io.Reader) error {
 	return nil
 }
 
-func (p *Patcher) packGZ(dst io.Writer, r io.Reader) error {
-	gz := gzip.NewWriter(dst)
-	defer gz.Close()
+func (p *Patcher) packGZ(dst io.Writer, reader io.Reader) error {
+	gzWriter := gzip.NewWriter(dst)
+	defer func(gzWriter *gzip.Writer) {
+		if err := gzWriter.Close(); err != nil {
+			logging.Log.Errorln(err)
+		}
+	}(gzWriter)
 
-	if _, err := io.Copy(gz, r); err != nil {
+	if _, err := io.Copy(gzWriter, reader); err != nil {
 		return err
 	}
-
 	return nil
 }
 
-func (p *Patcher) Patch(fr []RP, backup bool) {
-	r, err := os.OpenFile(p.path, os.O_RDWR, 0644)
+func (p *Patcher) Patch(patterns []Pattern, backup bool) {
+	inFile, err := os.OpenFile(p.path, os.O_RDWR, 0644)
 	if err != nil {
 		p.result <- newError(p, err)
 		return
 	}
-	defer r.Close()
+	defer func(inFile *os.File) {
+		if err := inFile.Close(); err != nil {
+			logging.Log.Errorln(err)
+		}
+	}(inFile)
 
-	t, err := p.getType(r)
+	fileType, err := p.getType(inFile)
 	if err != nil {
 		p.result <- newError(p, err)
 		return
 	}
 
 	var cpioFile *os.File
-
-	if t == kCpio {
-		log.Printf("%s: cut cpio header", p.path)
+	if fileType == kCpio {
+		logging.Log.Printf("%s: cut cpio header", p.path)
 
 		cpioFile, err = os.Create(filepath.Join(p.temp, fmt.Sprintf("%s.cpio", p.name)))
 		if err != nil {
 			p.result <- newError(p, err)
 			return
 		}
-		defer cpioFile.Close()
+		defer func(cpioFile *os.File) {
+			if err := cpioFile.Close(); err != nil {
+				logging.Log.Errorln(err)
+			}
+		}(cpioFile)
 
-		if err := p.cutCpio(cpioFile, r); err != nil {
+		if err := p.cutCpio(cpioFile, inFile); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 
-		p.cpioZeroFooterLen, err = p.findCpioZeroFooterLen(r)
+		p.cpioZeroFooterLen, err = p.findCpioZeroFooterLen(inFile)
 		if err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 
-		t, err = p.getType(r)
+		fileType, err = p.getType(inFile)
 		if err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 	}
 
-	if _, err = r.Seek(-kMaxMagicSize, 1); err != nil {
+	if _, err = inFile.Seek(-kMaxMagicSize, 1); err != nil {
 		p.result <- newError(p, err)
 		return
 	}
@@ -333,48 +351,65 @@ func (p *Patcher) Patch(fr []RP, backup bool) {
 		p.result <- newError(p, err)
 		return
 	}
-	defer rawFile.Close()
+	defer func(rawFile *os.File) {
+		if err := rawFile.Close(); err != nil {
+			logging.Log.Errorln(err)
+		}
+	}(rawFile)
 
-	switch t {
+	switch fileType {
 	case kXZ:
-		log.Printf("%s: unpack xz", p.path)
-		if err := p.unpackXZ(rawFile, r); err != nil {
+		logging.Log.Printf("%s: unpack xz", p.path)
+		if err := p.unpackXZ(rawFile, inFile); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 	case kGZ:
-		log.Printf("%s: unpack gz", p.path)
-		if err := p.unpackGZ(rawFile, r); err != nil {
+		logging.Log.Printf("%s: unpack gz", p.path)
+		if err := p.unpackGZ(rawFile, inFile); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 	}
 
 	replaced := 0
-	for i, b := range fr {
-		log.Printf("%s: search %d", p.path, i)
+	for patternIndex, pattern := range patterns {
+		logging.Log.Printf("%s: search %d [%s]", p.path, patternIndex, pattern.Description)
 
 		if _, err = rawFile.Seek(0, 0); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 
-		offsets, err := p.searchBytes(rawFile, b.Search)
+		offsets, err := p.searchBytes(rawFile, pattern.Search)
 		if err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 		if len(offsets) == 0 {
-			continue
+			p.result <- newError(p, fmt.Errorf("%s: pattern %d not found", p.path, patternIndex))
+			return
 		}
 
-		log.Printf("%s: patch %d", p.path, i)
+		if len(offsets) != pattern.Count {
+			p.result <- newError(p, fmt.Errorf(
+				"%s: pattern %d invalid offset count offsets_len[%d] != pattern_count[%d]",
+				p.path,
+				patternIndex,
+				len(offsets),
+				pattern.Count,
+			),
+			)
+			return
+		}
+		logging.Log.Printf("%s: patch %d", p.path, patternIndex)
 
-		r, err := p.replaceBytes(rawFile, offsets, b.Replace)
+		r, err := p.replaceBytes(rawFile, offsets, pattern.Replace)
 		if err != nil {
 			p.result <- newError(p, err)
 			return
 		}
+
 		replaced += r
 	}
 
@@ -384,12 +419,12 @@ func (p *Patcher) Patch(fr []RP, backup bool) {
 	}
 
 	if backup {
-		log.Printf("%s: backup", p.path)
-		if _, err = r.Seek(0, 0); err != nil {
+		logging.Log.Printf("%s: backup", p.path)
+		if _, err = inFile.Seek(0, 0); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
-		if err = p.backup(r); err != nil {
+		if err = p.backup(inFile); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
@@ -400,11 +435,11 @@ func (p *Patcher) Patch(fr []RP, backup bool) {
 		return
 	}
 
-	if _, err = r.Seek(0, 0); err != nil {
+	if _, err = inFile.Seek(0, 0); err != nil {
 		p.result <- newError(p, err)
 		return
 	}
-	if err = r.Truncate(0); err != nil {
+	if err = inFile.Truncate(0); err != nil {
 		p.result <- newError(p, err)
 		return
 	}
@@ -414,18 +449,17 @@ func (p *Patcher) Patch(fr []RP, backup bool) {
 			p.result <- newError(p, err)
 			return
 		}
-		if err = p.writeCpio(r, cpioFile); err != nil {
+		if err = p.writeCpio(inFile, cpioFile); err != nil {
 			p.result <- newError(p, err)
 			return
 		}
 	}
 
-	log.Printf("%s: pack gz", p.path)
-	if err = p.packGZ(r, rawFile); err != nil {
+	logging.Log.Printf("%s: pack gz", p.path)
+	if err = p.packGZ(inFile, rawFile); err != nil {
 		p.result <- newError(p, err)
 		return
 	}
 
 	p.result <- newResult(p, replaced)
-
 }

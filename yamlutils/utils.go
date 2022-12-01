@@ -1,12 +1,13 @@
 package yamlutils
 
 import (
+	"os"
+
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
 )
 
 func Load(path string, out interface{}) error {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
@@ -21,14 +22,13 @@ func Save(path string, in interface{}) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
-
 func dump(in interface{}) (out []byte, err error) {
-        data, err := yaml.Marshal(in)
-        if err != nil {
-                return nil, err
-        }
-		return data, nil
+	data, err := yaml.Marshal(in)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
