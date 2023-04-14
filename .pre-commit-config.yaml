@@ -1,0 +1,32 @@
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+        args: ['--assume-in-merge']
+      - id: check-shebang-scripts-are-executable
+      - id: check-executables-have-shebangs
+      - id: check-symlinks
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: mixed-line-ending
+        args: ['--fix=no']
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: forbid-new-submodules
+#      - id: no-commit-to-branch
+#        args: ['--branch', 'master', '--branch', 'develop', '--pattern', 'release-*']
+      - id: pretty-format-json
+        args: ['--no-sort-keys', '--autofix']
+      - id: trailing-whitespace
+        args: ['--markdown-linebreak-ext=md']
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.52.2
+    hooks:
+      - id: golangci-lint
