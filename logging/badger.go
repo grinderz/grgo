@@ -21,7 +21,7 @@ type BadgerLogger struct {
 
 func NewBadgerLogger(log *zap.Logger) *BadgerLogger {
 	return &BadgerLogger{
-		log: log.WithOptions(zap.AddCallerSkip(badgerCallerSkip)).With(FieldPkg("badger")),
+		log: log.WithOptions(zap.AddCallerSkip(badgerCallerSkip)).With(ZapFieldPkg("badger")),
 	}
 }
 

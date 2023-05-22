@@ -5,6 +5,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func FieldPkg(pkg string) zapcore.Field {
+func ZapFieldPkg(pkg string) zapcore.Field {
 	return zap.String("pkg", pkg)
 }
