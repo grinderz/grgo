@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-//go:generate stringer -type=OutputEnum -linecomment -output output_enum_string.go
+//go:generate go run golang.org/x/tools/cmd/stringer -type=OutputEnum -linecomment -output output_enum_string.go
 type OutputEnum int
 
 const (

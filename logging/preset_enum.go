@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-//go:generate stringer -type=PresetEnum -linecomment -output preset_enum_string.go
+//go:generate go run golang.org/x/tools/cmd/stringer -type=PresetEnum -linecomment -output preset_enum_string.go
 type PresetEnum int
 
 const (

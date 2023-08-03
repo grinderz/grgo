@@ -23,7 +23,7 @@ var (
 	}
 )
 
-//go:generate stringer -type=HeaderTypeEnum -linecomment -output header_type_enum_string.go
+//go:generate go run golang.org/x/tools/cmd/stringer -type=HeaderTypeEnum -linecomment -output header_type_enum_string.go
 type HeaderTypeEnum int
 
 const (
