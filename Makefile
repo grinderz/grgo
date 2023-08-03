@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash -o errtrace -o pipefail -o noclobber -o errexit -o nounset
 
-DOCKER_GOLANGCI_LINT_VERSION := 1.52.2
+DOCKER_GOLANGCI_LINT_VERSION := 1.53.3
 DOCKER_GOLANGCI_LINT_TIMEOUT := 5m
 
 .PHONY: go.generate
@@ -17,7 +17,7 @@ docker.lint:
 
 .PHONY: lint
 lint:
-	@golangci-lint run --timeout=$(DOCKER_GOLANGCI_LINT_TIMEOUT)
+	@golangci-lint run --timeout=$(DOCKER_GOLANGCI_LINT_TIMEOUT) $(args)
 
 .PHONY: pre-commit
 pre-commit:

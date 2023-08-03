@@ -1,4 +1,7 @@
 ---
+exclude: '.git'
+fail_fast: true
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
@@ -12,21 +15,22 @@ repos:
       - id: check-executables-have-shebangs
       - id: check-symlinks
       - id: check-json
-      - id: check-toml
-      - id: check-yaml
       - id: mixed-line-ending
         args: ['--fix=no']
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
+      - id: fix-encoding-pragma
+        args: ['--remove']
       - id: forbid-new-submodules
-#      - id: no-commit-to-branch
-#        args: ['--branch', 'master', '--branch', 'develop', '--pattern', 'release-*']
+      - id: no-commit-to-branch
+        args: ['--branch', 'master', '--branch', 'develop', '--pattern', 'release-*']
       - id: pretty-format-json
-        args: ['--no-sort-keys', '--autofix']
+        args: ['--no-sort-keys', '--autofix', '--no-ensure-ascii']
       - id: trailing-whitespace
         args: ['--markdown-linebreak-ext=md']
 
+
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.52.2
+    rev: v1.53.3
     hooks:
       - id: golangci-lint
