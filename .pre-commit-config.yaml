@@ -28,9 +28,3 @@ repos:
         args: ['--no-sort-keys', '--autofix', '--no-ensure-ascii']
       - id: trailing-whitespace
         args: ['--markdown-linebreak-ext=md']
-
-
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v1.53.3
-    hooks:
-      - id: golangci-lint
