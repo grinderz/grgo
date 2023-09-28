@@ -1,6 +1,6 @@
 ---
 run:
-  go: "1.20"
+  go: "1.21"
   issues-exit-code: 1
   skip-dirs-use-default: true
   allow-parallel-runners: false
@@ -32,10 +32,10 @@ linters:
     - exhaustruct
     - gofumpt
     - nlreturn
-    - gochecknoinits
     - musttag
     - depguard
   enable:
+    - gochecknoinits
     - asasalint
     - asciicheck
     - bidichk
@@ -99,6 +99,7 @@ linters:
     - wastedassign
     - whitespace
     - wrapcheck
+    - mirror
   presets:
     - bugs
     - comment
